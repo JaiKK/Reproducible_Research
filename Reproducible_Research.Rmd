@@ -1,0 +1,165 @@
+---
+title: "Analysis of NOAA storm database: Health & Economic Consequences"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment  
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. In this assignment we will use [StormData](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) database for analysis. The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete. 
+
+## Synopsis  
+
+In this exercise using NOAA database, we'll tried to answer mainly 2 question which are listed below:  
+
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?  
+2. Across the United States, which types of events have the greatest economic consequences?  
+
+Our study found that:  
+
+1. Tornado was major reason for fatalities and injuries across country  
+2. Flood was major reason for properties damage  
+
+
+## Data Processing  
+
+Before analysis download the dataset if already not present locally.
+```{r}
+fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+fileLocal <- "stormData.csv.bz2"
+
+if(!file.exists(fileLocal)){
+  download.file(fileURL, fileLocal)
+}
+```
+
+Read the dataset.
+```{r cache=TRUE}
+# Read data
+stormData <- read.csv(bzfile("stormData.csv.bz2"))
+```
+
+Original dataset is very big thus we have subsetted a small datafrom original including only those variables which are required for anlysis
+```{r cache=TRUE}
+# Subset data only for required variables
+stormDataSmall <- stormData[,c("EVTYPE","FATALITIES","INJURIES","PROPDMG","PROPDMGEXP","CROPDMG","CROPDMGEXP")]
+```
+
+Expenses columns contains values in different cases (upper and lower). Converting them in uppercase will ease in putting conditions.
+```{r cache=TRUE}
+# Make value of PROPDMGEXP consistant
+stormDataSmall[toupper(stormDataSmall$PROPDMGEXP) == "H", ]$PROPDMGEXP = "H"
+stormDataSmall[toupper(stormDataSmall$PROPDMGEXP) == "K", ]$PROPDMGEXP = "K"
+stormDataSmall[toupper(stormDataSmall$PROPDMGEXP) == "M", ]$PROPDMGEXP = "M"
+stormDataSmall[toupper(stormDataSmall$PROPDMGEXP) == "B", ]$PROPDMGEXP = "B"
+
+# Make value of CROPDMGEXP consistant
+stormDataSmall[toupper(stormDataSmall$CROPDMGEXP) == "K", ]$CROPDMGEXP = "K"
+stormDataSmall[toupper(stormDataSmall$CROPDMGEXP) == "M", ]$CROPDMGEXP = "M"
+stormDataSmall[toupper(stormDataSmall$CROPDMGEXP) == "B", ]$CROPDMGEXP = "B"
+```
+
+Calculate actual amounts in numbers for property and crop. This is important for calculation and ploting.
+```{r cache=TRUE}
+# Add amount variable and calculate correct amount for property damage
+stormDataSmall$PROPDMG_AMT = 0
+stormDataSmall[stormDataSmall$PROPDMGEXP == "H",]$PROPDMG_AMT = stormDataSmall[stormDataSmall$PROPDMGEXP == "H",]$PROPDMG * 10 ^ 2
+stormDataSmall[stormDataSmall$PROPDMGEXP == "K",]$PROPDMG_AMT = stormDataSmall[stormDataSmall$PROPDMGEXP == "K",]$PROPDMG * 10 ^ 3
+stormDataSmall[stormDataSmall$PROPDMGEXP == "M",]$PROPDMG_AMT = stormDataSmall[stormDataSmall$PROPDMGEXP == "M",]$PROPDMG * 10 ^ 6
+stormDataSmall[stormDataSmall$PROPDMGEXP == "B",]$PROPDMG_AMT = stormDataSmall[stormDataSmall$PROPDMGEXP == "B",]$PROPDMG * 10 ^ 9
+
+# Add amount variable and calculate correct amount for crop damage
+stormDataSmall$CROPDMG_AMT = 0
+stormDataSmall[stormDataSmall$CROPDMGEXP == "H",]$CROPDMG_AMT = stormDataSmall[stormDataSmall$CROPDMGEXP == "H",]$CROPDMG * 10 ^ 2
+stormDataSmall[stormDataSmall$CROPDMGEXP == "K",]$CROPDMG_AMT = stormDataSmall[stormDataSmall$CROPDMGEXP == "K",]$CROPDMG * 10 ^ 3
+stormDataSmall[stormDataSmall$CROPDMGEXP == "M",]$CROPDMG_AMT = stormDataSmall[stormDataSmall$CROPDMGEXP == "M",]$CROPDMG * 10 ^ 6
+stormDataSmall[stormDataSmall$CROPDMGEXP == "B",]$CROPDMG_AMT = stormDataSmall[stormDataSmall$CROPDMGEXP == "B",]$CROPDMG * 10 ^ 9
+
+```
+
+
+```{r, echo=TRUE, message=FALSE}
+# Enable packages
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+
+# Calulate fatalities by eventtype
+sum_fatalities <- select(stormDataSmall, FATALITIES, EVTYPE) %>%
+  group_by(EVTYPE) %>%
+  summarise(Tot_fatalities = sum(FATALITIES)) %>%
+  arrange(desc(Tot_fatalities))
+
+# take top 10 records for ploting
+top_fatalities <- sum_fatalities[1:10,]
+top_fatalities$EVTYPE <- factor(top_fatalities$EVTYPE ,levels = top_fatalities$EVTYPE)
+
+
+g <- ggplot(top_fatalities,(aes(EVTYPE,Tot_fatalities))) +
+  geom_bar(stat = "identity") +
+  theme_light(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(x = "Event Category", y = "Total Fatalities", title = "Top 10 major fatalities in weather event")
+
+print(g)
+
+```
+
+```{r}
+# Top Injuries 
+sum_injuries <- select(stormDataSmall, INJURIES, EVTYPE) %>%
+  group_by(EVTYPE) %>%
+  summarise(Tot_injuries = sum(INJURIES)) %>%
+  arrange(desc(Tot_injuries))
+
+top_injuries <- sum_injuries[1:10,]
+
+top_injuries$EVTYPE <- factor(top_injuries$EVTYPE ,levels = top_injuries$EVTYPE)
+
+
+g <- ggplot(top_injuries,(aes(EVTYPE,Tot_injuries))) + 
+  geom_bar(stat = "identity") +
+  theme_light(base_size = 10) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(x = "Event Category", y = "Total Injuries", title = "Top 10 major injuries record in weather event")
+
+print(g)
+```
+
+```{r}
+# Top Economics Disasters by extream weather
+economis_loss <- select(stormDataSmall, EVTYPE, PROPDMG_AMT, CROPDMG_AMT) %>%
+  group_by(EVTYPE) %>%
+  summarise(tot_economis_loss = sum(PROPDMG_AMT + CROPDMG_AMT)) %>%
+  arrange(desc(tot_economis_loss))
+
+top_economis_loss <- economis_loss[1:10,]
+
+top_economis_loss$EVTYPE <- factor(top_economis_loss$EVTYPE ,levels = top_economis_loss$EVTYPE)
+
+
+g <- ggplot(top_economis_loss,(aes(EVTYPE,tot_economis_loss))) + 
+  geom_bar(stat = "identity") +
+  theme_light(base_size = 10) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), plot.title = element_text(hjust = 0.5, face = "bold")) +
+  labs(x = "Event Category", y = "Sum of loss ($)", title = "Top 10 major economis loss in weather event")
+
+print(g)
+```
+
+
+## Results  
+
+Our study shows that Tornado's were major reason for fatalities and injuries across country and flood's were major reason for properties damage.
+  
+  
+  
+***
